@@ -1,0 +1,58 @@
+# CI build (debug) for the Remote Pi app (app/).
+#
+# Purpose: quick feedback on PRs / feature branches — compiles the app and
+# uploads a debug APK as an artifact (downloadable after login, 90-day
+# retention). This is NOT a release: no signing, no GitHub Release.
+#
+# Release builds live in app-release.yml (tag `app-v*`).
+
+name: app-ci
+
+on:
+  push:
+    branches: ["feature/**", "main"]
+    paths:
+      - "app/**"
+      - ".github/workflows/app-ci.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/app-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.44.4"
+
+jobs:
+  build-android:
+    name: Build debug APK
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: Flutter pub get
+        working-directory: app
+        run: flutter pub get
+      - name: Build debug APK
+        working-directory: app
+        run: flutter build apk --debug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
