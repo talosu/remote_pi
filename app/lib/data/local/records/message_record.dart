@@ -13,6 +13,7 @@ class MessageRecord {
   final int seq;
   final MsgRole role;
   final String text;
+  final String thinking;
 
   /// Plan/30 — attached image (user messages only).
   final MessageImage? image;
@@ -35,6 +36,7 @@ class MessageRecord {
     required this.seq,
     required this.role,
     this.text = '',
+    this.thinking = '',
     this.image,
     this.tool,
     required this.ts,
@@ -46,6 +48,7 @@ class MessageRecord {
   MessageRecord copyWith({
     int? seq,
     String? text,
+    String? thinking,
     MessageImage? image,
     ToolEventData? tool,
     bool? pending,
@@ -55,6 +58,7 @@ class MessageRecord {
     seq: seq ?? this.seq,
     role: role,
     text: text ?? this.text,
+    thinking: thinking ?? this.thinking,
     image: image ?? this.image,
     tool: tool ?? this.tool,
     ts: ts,
@@ -68,6 +72,7 @@ class MessageRecord {
     'seq': seq,
     'role': role.name,
     'text': text,
+    if (thinking.isNotEmpty) 'thinking': thinking,
     if (image != null) 'image': {'data': image!.data, 'mime': image!.mime},
     if (tool != null) 'tool': tool!.toJson(),
     'ts': ts.millisecondsSinceEpoch,
@@ -87,6 +92,7 @@ class MessageRecord {
         orElse: () => MsgRole.assistant,
       ),
       text: (j['text'] as String?) ?? '',
+      thinking: (j['thinking'] as String?) ?? '',
       image: imageRaw is Map
           ? MessageImage(
               data: imageRaw['data'] as String,
@@ -115,7 +121,7 @@ class MessageRecord {
           image: image,
         );
       case MsgRole.assistant:
-        return AssistantMsg(id: id, text: text);
+        return AssistantMsg(id: id, text: text, thinking: thinking);
       case MsgRole.tool:
         final t = tool;
         return ToolEvent(

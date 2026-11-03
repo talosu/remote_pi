@@ -195,13 +195,32 @@ class AssistantBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final typo = context.typo;
     // Plan/32b — agent output is rendered as Markdown (GFM + code blocks),
     // spanning the FULL content width (the message list already pads 16px on
     // each side) — unlike the user's right-aligned chat bubble, which stays
     // capped. Selectable so prose/code can be copied.
     return SizedBox(
       width: double.infinity,
-      child: AgentMarkdown(message.text, selectable: true),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.thinking.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                message.thinking,
+                style: typo.mono.copyWith(
+                  color: colors.muted,
+                  fontStyle: FontStyle.italic,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          AgentMarkdown(message.text, selectable: true),
+        ],
+      ),
     );
   }
 }

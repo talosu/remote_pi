@@ -2185,6 +2185,8 @@ const extension: ExtensionFactory = (pi: ExtensionAPI): void => {
     const ae = event.assistantMessageEvent;
     if (ae.type === "text_delta") {
       _broadcastToActive({ type: "agent_chunk", in_reply_to: _currentTurnId, delta: ae.delta });
+    } else if (ae.type === "thinking_delta") {
+      _broadcastToActive({ type: "agent_thinking", in_reply_to: _currentTurnId, delta: ae.delta });
     }
   });
 
@@ -4962,8 +4964,17 @@ export function _mapAgentMessagesToEvents(
         : undefined;
       for (const raw of content) {
         if (!raw || typeof raw !== "object") continue;
-        const block = raw as { type?: string; text?: unknown; id?: unknown; name?: unknown; arguments?: unknown };
-        if (block.type === "text") {
+        const block = raw as { type?: string; text?: unknown; thinking?: unknown; id?: unknown; name?: unknown; arguments?: unknown };
+        if (block.type === "thinking") {
+          const text = String(block.thinking ?? "");
+          if (!text) continue;
+          events.push({
+            ts,
+            type: "agent_thinking",
+            in_reply_to: lastUserId ?? `sync_${ts}`,
+            text,
+          });
+        } else if (block.type === "text") {
           const text = String(block.text ?? "");
           if (!text) continue;
           const ev: SessionHistoryEvent = {

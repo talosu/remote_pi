@@ -110,14 +110,22 @@ class UserMsg extends ChatMessage {
 
 class AssistantMsg extends ChatMessage {
   final String text;
-  const AssistantMsg({required super.id, required this.text});
+  final String thinking;
+  const AssistantMsg({
+    required super.id,
+    required this.text,
+    this.thinking = '',
+  });
 
   @override
   bool operator ==(Object other) =>
-      other is AssistantMsg && other.id == id && other.text == text;
+      other is AssistantMsg &&
+      other.id == id &&
+      other.text == text &&
+      other.thinking == thinking;
 
   @override
-  int get hashCode => Object.hash(id, text);
+  int get hashCode => Object.hash(id, text, thinking);
 }
 
 class ToolEvent extends ChatMessage {
@@ -198,11 +206,19 @@ class CompactionMsg extends ChatMessage {
 class StreamingMessage {
   final String inReplyTo; // id of the UserMsg being answered
   final String buffer;
+  final String thinking;
 
-  const StreamingMessage({required this.inReplyTo, this.buffer = ''});
+  const StreamingMessage({
+    required this.inReplyTo,
+    this.buffer = '',
+    this.thinking = '',
+  });
 
   StreamingMessage appendDelta(String delta) =>
-      StreamingMessage(inReplyTo: inReplyTo, buffer: buffer + delta);
+      StreamingMessage(inReplyTo: inReplyTo, buffer: buffer + delta, thinking: thinking);
+
+  StreamingMessage appendThinking(String delta) =>
+      StreamingMessage(inReplyTo: inReplyTo, buffer: buffer, thinking: thinking + delta);
 
   @override
   bool operator ==(Object other) =>

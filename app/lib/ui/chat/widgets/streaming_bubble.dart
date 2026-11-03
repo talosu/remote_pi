@@ -47,6 +47,18 @@ class _StreamingBubbleState extends State<StreamingBubble>
         children: [
           // Render partial markdown live (gpt_markdown tolerates incomplete
           // syntax); not selectable while it's still changing.
+          if (widget.streaming.thinking.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                widget.streaming.thinking,
+                style: context.typo.mono.copyWith(
+                  color: context.colors.muted,
+                  fontStyle: FontStyle.italic,
+                  fontSize: 12,
+                ),
+              ),
+            ),
           if (hasText) AgentMarkdown(widget.streaming.buffer),
           _BlinkingCursor(controller: _blink),
         ],

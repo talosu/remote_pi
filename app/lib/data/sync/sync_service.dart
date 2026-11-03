@@ -50,6 +50,8 @@ class SyncService extends Service {
   // Streaming — in-memory only (#7).
   final StringBuffer _chunkBuffer = StringBuffer();
   String _chunkReplyTo = '';
+  final StringBuffer _thinkingBuffer = StringBuffer();
+  String _thinkingReplyTo = '';
   Timer? _flushTimer;
   StreamingMessage? _streaming;
   final StreamController<StreamingMessage?> _streamingController =
@@ -163,6 +165,8 @@ class SyncService extends Service {
     _flushTimer = null;
     _chunkBuffer.clear();
     _chunkReplyTo = '';
+    _thinkingBuffer.clear();
+    _thinkingReplyTo = '';
     _workingReplyTo = null;
     _sawRemoteWorking = false;
     _setQueuedMessages(const []);
@@ -459,6 +463,13 @@ class SyncService extends Service {
       case AgentChunk(:final inReplyTo, :final delta):
         _chunkBuffer.write(delta);
         _chunkReplyTo = inReplyTo;
+        _flushTimer?.cancel();
+        _flushTimer = Timer(const Duration(milliseconds: 16), _flushChunks);
+        _setWorking(true, replyTo: inReplyTo);
+
+      case AgentThinking(:final inReplyTo, :final delta):
+        _thinkingBuffer.write(delta);
+        _thinkingReplyTo = inReplyTo;
         _flushTimer?.cancel();
         _flushTimer = Timer(const Duration(milliseconds: 16), _flushChunks);
         _setWorking(true, replyTo: inReplyTo);
@@ -762,6 +773,23 @@ class SyncService extends Service {
   List<MessageRecord> _convertHistory(List<SessionHistoryEvent> events) {
     final out = <MessageRecord>[];
     var seq = 0;
+    String pendingThinking = '';
+    void flushPendingThinking() {
+      if (pendingThinking.isEmpty) return;
+      out.add(
+        MessageRecord(
+          id: 'thinking_${seq}',
+          seq: seq++,
+          role: MsgRole.assistant,
+          text: '',
+          thinking: pendingThinking,
+          ts: DateTime.fromMillisecondsSinceEpoch(
+            events.isNotEmpty ? events.first.ts : 0,
+          ),
+        ),
+      );
+      pendingThinking = '';
+    }
     for (final e in events) {
       switch (e) {
         case UserInputEvt(:final id, :final text, :final image):
@@ -777,6 +805,8 @@ class SyncService extends Service {
               ts: DateTime.fromMillisecondsSinceEpoch(e.ts),
             ),
           );
+        case AgentThinkingEvt(:final inReplyTo, :final text):
+          pendingThinking += text;
         case AgentMessageEvt(:final inReplyTo, :final text):
           out.add(
             MessageRecord(
@@ -784,9 +814,12 @@ class SyncService extends Service {
               seq: seq++,
               role: MsgRole.assistant,
               text: text,
+              thinking: pendingThinking,
               ts: DateTime.fromMillisecondsSinceEpoch(e.ts),
             ),
           );
+          pendingThinking = '';
+      }
         case ToolRequestEvt(:final toolCallId, :final tool, :final args):
           out.add(
             MessageRecord(
@@ -845,6 +878,20 @@ class SyncService extends Service {
             ),
           );
       }
+    }
+    if (pendingThinking.isNotEmpty) {
+      out.add(
+        MessageRecord(
+          id: 'thinking_${seq}',
+          seq: seq++,
+          role: MsgRole.assistant,
+          text: '',
+          thinking: pendingThinking,
+          ts: DateTime.fromMillisecondsSinceEpoch(
+            events.isNotEmpty ? events.last.ts : 0,
+          ),
+        ),
+      );
     }
     return out;
   }
@@ -1082,14 +1129,32 @@ class SyncService extends Service {
   // ---------------------------------------------------------------------------
 
   void _flushChunks() {
-    if (_chunkBuffer.isEmpty) return;
-    final delta = _chunkBuffer.toString();
-    _chunkBuffer.clear();
+    final hasText = _chunkBuffer.isNotEmpty;
+    final hasThinking = _thinkingBuffer.isNotEmpty;
+    if (!hasText && !hasThinking) return;
+    String? textDelta;
+    String? thinkingDelta;
+    if (hasText) {
+      textDelta = _chunkBuffer.toString();
+      _chunkBuffer.clear();
+    }
+    if (hasThinking) {
+      thinkingDelta = _thinkingBuffer.toString();
+      _thinkingBuffer.clear();
+    }
+    final replyTo = textDelta != null ? _chunkReplyTo : _thinkingReplyTo;
     final cur = _streaming;
-    if (cur != null && cur.inReplyTo == _chunkReplyTo) {
-      _emitStreaming(cur.appendDelta(delta));
+    if (cur != null && cur.inReplyTo == replyTo) {
+      var next = cur;
+      if (textDelta != null) next = next.appendDelta(textDelta);
+      if (thinkingDelta != null) next = next.appendThinking(thinkingDelta);
+      _emitStreaming(next);
     } else {
-      _emitStreaming(StreamingMessage(inReplyTo: _chunkReplyTo, buffer: delta));
+      _emitStreaming(StreamingMessage(
+        inReplyTo: replyTo,
+        buffer: textDelta ?? '',
+        thinking: thinkingDelta ?? '',
+      ));
     }
   }
 
@@ -1109,10 +1174,19 @@ class SyncService extends Service {
       final cur = _streaming;
       _streaming = (cur != null && cur.inReplyTo == _chunkReplyTo)
           ? cur.appendDelta(delta)
-          : StreamingMessage(inReplyTo: _chunkReplyTo, buffer: delta);
+          : StreamingMessage(inReplyTo: _chunkReplyTo, buffer: delta, thinking: cur?.thinking ?? '');
+    }
+    if (_thinkingBuffer.isNotEmpty) {
+      final delta = _thinkingBuffer.toString();
+      _thinkingBuffer.clear();
+      final cur = _streaming;
+      _streaming = (cur != null && cur.inReplyTo == _thinkingReplyTo)
+          ? cur.appendThinking(delta)
+          : StreamingMessage(inReplyTo: _thinkingReplyTo, thinking: delta);
     }
     final text = _streaming?.buffer ?? '';
-    if (text.isNotEmpty) {
+    final thinking = _streaming?.thinking ?? '';
+    if (text.isNotEmpty || thinking.isNotEmpty) {
       final id = 'agent_${uuid7()}';
       // ignore: discarded_futures
       _upsert(
@@ -1123,11 +1197,13 @@ class SyncService extends Service {
           seq: seq,
           role: MsgRole.assistant,
           text: text,
+          thinking: thinking,
           ts: DateTime.now(),
         ),
       );
     }
     _chunkReplyTo = '';
+    _thinkingReplyTo = '';
     _emitStreaming(null);
     return text;
   }
@@ -1137,6 +1213,8 @@ class SyncService extends Service {
     _flushTimer = null;
     _chunkBuffer.clear();
     _chunkReplyTo = '';
+    _thinkingBuffer.clear();
+    _thinkingReplyTo = '';
     _emitStreaming(null);
   }
 

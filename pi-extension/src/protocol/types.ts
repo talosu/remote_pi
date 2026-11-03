@@ -251,6 +251,12 @@ export type SessionHistoryEvent =
     }
   | {
       ts: number;
+      type: "agent_thinking";
+      in_reply_to: string;
+      text: string;
+    }
+  | {
+      ts: number;
       type: "agent_message";
       in_reply_to: string;
       text: string;
@@ -304,6 +310,7 @@ export type ServerMessage =
   | { type: "queued_message_state"; id?: string; text?: string; items?: QueuedMessageItem[] }
   | { type: "steer_consumed"; id: string }
   | { type: "agent_chunk"; in_reply_to: string; delta: string }
+  | { type: "agent_thinking"; in_reply_to: string; delta: string }
   | { type: "agent_done"; in_reply_to: string; usage?: Usage }
   | { type: "agent_message"; in_reply_to: string; text: string; usage?: Usage }
   // Plan/32: pushed after a context compaction (live, and replayed on history
@@ -362,7 +369,7 @@ export type ActionName =
  * model's metadata if the picker fetches it later.
  */
 export type ThinkingLevel =
-  | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /**
  * Plan/28 — Wire shape for one model entry in the app's model picker.

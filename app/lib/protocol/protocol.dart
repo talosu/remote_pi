@@ -619,7 +619,8 @@ enum ThinkingLevel {
   low('low'),
   medium('medium'),
   high('high'),
-  xhigh('xhigh');
+  xhigh('xhigh'),
+  max('max');
 
   final String wire;
   const ThinkingLevel(this.wire);
@@ -762,6 +763,7 @@ sealed class ServerMessage {
     final type = json['type'] as String?;
     return switch (type) {
       'agent_chunk' => AgentChunk.fromJson(json),
+      'agent_thinking' => AgentThinking.fromJson(json),
       'agent_done' => AgentDone.fromJson(json),
       'tool_request' => ToolRequest.fromJson(json),
       'tool_result' => ToolResult.fromJson(json),
@@ -803,6 +805,17 @@ class AgentChunk extends ServerMessage {
   AgentChunk({required this.inReplyTo, required this.delta});
 
   factory AgentChunk.fromJson(Map<String, dynamic> j) => AgentChunk(
+    inReplyTo: j['in_reply_to'] as String,
+    delta: j['delta'] as String,
+  );
+}
+
+class AgentThinking extends ServerMessage {
+  final String inReplyTo;
+  final String delta;
+  AgentThinking({required this.inReplyTo, required this.delta});
+
+  factory AgentThinking.fromJson(Map<String, dynamic> j) => AgentThinking(
     inReplyTo: j['in_reply_to'] as String,
     delta: j['delta'] as String,
   );
@@ -1178,6 +1191,11 @@ sealed class SessionHistoryEvent {
         result: j['result'],
         error: j['error'] as String?,
       ),
+      'agent_thinking' => AgentThinkingEvt(
+        ts: ts,
+        inReplyTo: j['in_reply_to'] as String,
+        text: j['text'] as String,
+      ),
       'agent_message' => AgentMessageEvt(
         ts: ts,
         inReplyTo: j['in_reply_to'] as String,
@@ -1239,6 +1257,16 @@ class AgentMessageEvt extends SessionHistoryEvent {
   final String inReplyTo;
   final String text;
   const AgentMessageEvt({
+    required super.ts,
+    required this.inReplyTo,
+    required this.text,
+  });
+}
+
+class AgentThinkingEvt extends SessionHistoryEvent {
+  final String inReplyTo;
+  final String text;
+  const AgentThinkingEvt({
     required super.ts,
     required this.inReplyTo,
     required this.text,
