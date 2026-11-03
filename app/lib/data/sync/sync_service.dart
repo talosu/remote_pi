@@ -819,7 +819,6 @@ class SyncService extends Service {
             ),
           );
           pendingThinking = '';
-      }
         case ToolRequestEvt(:final toolCallId, :final tool, :final args):
           out.add(
             MessageRecord(
